@@ -1,38 +1,50 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "./firebase.js";
+import { createFirestoreStorage } from "./firestoreStorage.js";
+import Login from "./Login.jsx";
 import App from "./App.jsx";
+import { Loader2 } from "lucide-react";
 
-// The component was originally built as a Claude Artifact, which provides a
-// `window.storage` key-value API that persists per-user automatically.
-// Outside that environment there's no backend, so this shim maps the same
-// get/set/delete/list calls onto the browser's localStorage instead.
-// Data will now persist per-browser (not per-account) — same idea, just
-// stored locally on whichever device/browser you use the site from.
-window.storage = {
-  async get(key) {
-    const v = window.localStorage.getItem(key);
-    if (v === null) return null;
-    return { key, value: v, shared: false };
-  },
-  async set(key, value) {
-    window.localStorage.setItem(key, value);
-    return { key, value, shared: false };
-  },
-  async delete(key) {
-    const existed = window.localStorage.getItem(key) !== null;
-    window.localStorage.removeItem(key);
-    return { key, deleted: existed, shared: false };
-  },
-  async list(prefix) {
-    const keys = Object.keys(window.localStorage).filter(
-      (k) => !prefix || k.startsWith(prefix)
+function Root() {
+  const [status, setStatus] = useState("checking"); // checking | signedOut | signedIn
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // Point the app's storage calls at this user's private Firestore
+        // documents before we ever mount it, so its first load reads the
+        // right data.
+        window.storage = createFirestoreStorage(user.uid);
+        setStatus("signedIn");
+      } else {
+        setStatus("signedOut");
+      }
+      setReady(true);
+    });
+    return unsub;
+  }, []);
+
+  if (!ready) {
+    return (
+      <div style={{
+        minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+        background: "#EAF1E4", color: "#4C6656", fontFamily: "IBM Plex Sans, sans-serif",
+      }}>
+        <Loader2 className="animate-spin" size={20} style={{ marginRight: 8 }} /> Loading…
+      </div>
     );
-    return { keys, prefix, shared: false };
-  },
-};
+  }
+
+  if (status === "signedOut") return <Login />;
+
+  return <App onSignOut={() => signOut(auth)} />;
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <Root />
   </React.StrictMode>
 );

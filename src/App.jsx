@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard, Wallet, Landmark, PiggyBank, Plus, Trash2,
   ChevronDown, ChevronRight, ArrowDownCircle, ArrowUpCircle,
-  Save, Check, Loader2, X, NotebookPen, TrendingUp, TrendingDown, IndianRupee,
+  Save, Check, Loader2, X, NotebookPen, TrendingUp, TrendingDown, IndianRupee, LogOut,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -51,7 +51,7 @@ function computeClosing(m) {
 /* ------------------------------------------------------------------ */
 /* Main App                                                            */
 /* ------------------------------------------------------------------ */
-export default function App() {
+export default function App({ onSignOut } = {}) {
   const [data, setData] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
@@ -196,11 +196,8 @@ export default function App() {
             var(--paper);
           color: var(--ink);
           font-family: 'IBM Plex Sans', sans-serif;
-          border-radius: 18px;
-          overflow: hidden;
-          border: 1px solid var(--rule-strong);
-          box-shadow: 0 1px 2px rgba(27,53,39,0.06), 0 12px 32px -14px rgba(27,53,39,0.28);
-          min-height: 600px;
+          width: 100%;
+          min-height: 100vh;
           display: flex;
           flex-direction: column;
         }
@@ -355,7 +352,7 @@ export default function App() {
         }
       `}</style>
 
-      <TopBar saveState={saveState} />
+      <TopBar saveState={saveState} onSignOut={onSignOut} />
       <div className="lg-body">
         <Nav tab={tab} setTab={setTab} />
         <div className="lg-main">
@@ -369,7 +366,7 @@ export default function App() {
   );
 }
 
-function TopBar({ saveState }) {
+function TopBar({ saveState, onSignOut }) {
   return (
     <div className="lg-topbar">
       <div className="lg-brand">
@@ -379,10 +376,17 @@ function TopBar({ saveState }) {
           <span className="sub">Personal Cash Flow &amp; Investments</span>
         </div>
       </div>
-      <div className="lg-save">
-        {saveState === "saving" && <><Loader2 size={13} className="animate-spin" /> Saving…</>}
-        {saveState === "saved" && <><Check size={13} /> Saved</>}
-        {saveState === "idle" && <><Save size={13} /> Up to date</>}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="lg-save">
+          {saveState === "saving" && <><Loader2 size={13} className="animate-spin" /> Saving…</>}
+          {saveState === "saved" && <><Check size={13} /> Saved</>}
+          {saveState === "idle" && <><Save size={13} /> Up to date</>}
+        </div>
+        {onSignOut && (
+          <button className="lg-icon-btn" title="Sign out" onClick={onSignOut} style={{ border: "1px solid var(--rule-strong)" }}>
+            <LogOut size={14} />
+          </button>
+        )}
       </div>
     </div>
   );

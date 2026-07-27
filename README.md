@@ -1,18 +1,49 @@
 # My Ledger
 
-A personal expense / salary / mutual-fund tracker, packaged as a standalone
-website ready to deploy to GitHub Pages.
+A personal expense / salary / mutual-fund tracker. Hosted as a static site
+on GitHub Pages, with Firebase handling login and data sync across devices.
 
-## 1. One-time setup
+## Part A — Set up Firebase (one-time, ~10 minutes)
+
+1. Go to [console.firebase.google.com](https://console.firebase.google.com)
+   and create a new project (free "Spark" plan is enough).
+2. **Enable Authentication**: left sidebar → Build → Authentication →
+   "Get started" → under "Sign-in method", enable **Email/Password**.
+3. **Create your one account**: still in Authentication → "Users" tab →
+   "Add user" → enter the email + password you'll sign in with. This app
+   has no public sign-up form, so in normal use this is the only account
+   anyone would ever sign in as.
+4. **Copy your UID**: in that same "Users" table, copy the value shown in
+   the "User UID" column for the account you just created — you'll need
+   it in the next step.
+5. **Create the database**: left sidebar → Build → Firestore Database →
+   "Create database" → start in **production mode** → pick any region.
+6. **Lock down the security rules**: open `firestore.rules` (included in
+   this project), replace `PASTE_YOUR_FIREBASE_UID_HERE` with the UID you
+   copied in step 4, then paste the whole file into Firestore → "Rules"
+   tab on the console and click Publish. This hardcodes data access to
+   that one exact account — even if someone else creates their own
+   separate Firebase account, every read/write they attempt is denied
+   outright, so their account can't do anything at all.
+7. **Get your web config**: Project settings (gear icon, top left) →
+   scroll to "Your apps" → click the web icon `</>` → register an app
+   (nickname doesn't matter, skip hosting) → copy the `firebaseConfig`
+   object shown.
+8. Paste those values into `src/firebase.js` in this project, replacing
+   the placeholders.
+9. **Authorize your GitHub Pages domain**: Authentication → Settings →
+   "Authorized domains" → Add domain → enter
+   `<your-username>.github.io` (once you know it from Part B).
+
+## Part B — Deploy to GitHub Pages
 
 1. Create a new **public** repo on GitHub, e.g. `my-ledger`.
 2. In `vite.config.js`, set `base` to match your repo name exactly:
    ```js
    base: "/my-ledger/",
    ```
-   (If your repo is named something else, use that name instead — keep the
-   leading and trailing slashes.)
-3. Push this whole folder to that repo:
+3. From inside this project folder (the one with `package.json` directly
+   in it — not a folder wrapping it):
    ```bash
    git init
    git add .
@@ -21,43 +52,47 @@ website ready to deploy to GitHub Pages.
    git remote add origin https://github.com/<your-username>/my-ledger.git
    git push -u origin main
    ```
-
-## 2. Turn on GitHub Pages
-
-1. On GitHub, go to your repo → **Settings** → **Pages**.
-2. Under "Build and deployment" → **Source**, choose **GitHub Actions**.
-3. That's it — the included workflow (`.github/workflows/deploy.yml`) will
-   build and deploy the site automatically every time you push to `main`.
-4. After the first push, check the **Actions** tab to watch it build. Once
-   green, your site will be live at:
+4. On GitHub: repo → **Settings** → **Pages** → Source → **GitHub
+   Actions**. The included workflow (`.github/workflows/deploy.yml`)
+   builds and deploys automatically on every push to `main`.
+5. Check the **Actions** tab — once the run is green, your site is live
+   at:
    ```
    https://<your-username>.github.io/my-ledger/
    ```
+6. Go back and finish step 8 in Part A now that you have this URL.
 
-## 3. Using it day to day
+## Using it day to day
 
-- Just open the URL above — no login needed, it's just a static site.
-- Your data is saved in your **browser's local storage** on whichever
-  device you use. It is *not* synced across devices or browsers, and
-  clearing your browser data will clear it too. (This is the trade-off of
-  a no-backend static site — see note below if you want it to sync
-  across devices.)
+- Open your site URL, sign in with the one email/password you created in
+  Firebase, and use it as normal.
+- Data now lives in Firestore, so signing in from your phone or another
+  computer shows the same data, kept in sync automatically.
+- Use the sign-out icon (top right) when you're done on a shared device.
 
-## 4. Local development (optional)
+## Local development (optional)
 
 ```bash
 npm install
 npm run dev
 ```
-Opens the app locally at `http://localhost:5173`.
+Opens the app locally at `http://localhost:5173`. Firebase auth works
+the same way locally once `src/firebase.js` has your real config — you
+may also need to add `localhost` to Firebase's Authorized domains list.
 
-## Notes
+## Notes on security
 
-- This was originally built as a Claude Artifact, which has its own
-  built-in per-account storage. That's swapped out here (see
-  `src/main.jsx`) for a `localStorage`-based shim, since a static GitHub
-  Pages site has no backend of its own.
-- If you'd like the data to sync across devices/browsers (not just persist
-  on one), you'd need a small backend or a service like Firebase/Supabase
-  to store the JSON instead of `localStorage` — happy to help wire that up
-  if you want it later.
+- `src/firebase.js`'s config values are safe to keep in the repo/public
+  code — Firebase config isn't a secret. Real access control is enforced
+  server-side by `firestore.rules`, which only Firebase itself can change
+  (via the console, or an authenticated deploy).
+- There's no password-reset flow wired into the UI. If you forget your
+  password, reset it manually from Firebase Console → Authentication →
+  Users → your account → "Reset password".
+- Since the security rules are hardcoded to your exact UID, anyone who
+  creates their own separate Firebase account on this project gets denied
+  on every single read/write — their account simply can't function. If
+  you ever want to fully prevent even those empty accounts from being
+  created (cosmetic only — they can't access anything either way), that
+  needs a Cloud Function on Firebase's paid Blaze plan; ask if you'd like
+  that added.

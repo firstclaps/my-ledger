@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Locked to ONE exact Firebase Auth UID — yours. Replace the string
+    // below with your real UID (Firebase Console -> Authentication ->
+    // Users -> copy the value in the "User UID" column for your account).
+    //
+    // This is stricter than matching "whoever is asking for their own
+    // path": even if a stranger creates their own separate account, every
+    // single read/write they attempt is denied outright, because their
+    // UID will never equal the one hardcoded here. Their account becomes
+    // completely non-functional — not just empty, but permanently locked
+    // out of storing or reading anything at all.
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == "UbAuzaQWSLcNq6Rpq1oMxgvLssj1";
+    }
+  }
+}
