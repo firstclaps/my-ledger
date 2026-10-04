@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer,
+  CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from "recharts";
 import {
   LayoutDashboard, Wallet, Landmark, PiggyBank, Plus, Trash2,
   ChevronDown, ChevronRight, ArrowDownCircle, ArrowUpCircle,
-  Save, Loader2, X, BookOpen, TrendingUp, TrendingDown, IndianRupee, LogOut,
+  Save, Loader2, X, BookOpen, TrendingUp, TrendingDown, IndianRupee, LogOut, Sun, Moon,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -120,12 +120,76 @@ function downloadLedgerCSV(year, months, fromMonth, toMonth) {
   URL.revokeObjectURL(url);
 }
 
+function downloadSalaryCSV(year, rows) {
+  if (!rows) rows = [];
+  const quote = (v) => {
+    if (v === null || v === undefined) return '""';
+    return '"' + String(v).replace(/"/g, '""') + '"';
+  };
+  const cell = (v, isNumeric) => isNumeric ? String(Number(v) || 0) : quote(v);
+
+  const hdr = [quote("Year"), quote("Month"), "Gross", "Tax", "ProfTax", "EPF", "Misc", "Net"].join(",");
+  const rowsOut = [hdr];
+  let totGross = 0, totTax = 0, totPtax = 0, totEpf = 0, totMisc = 0, totNet = 0;
+  rows.forEach((r) => {
+    const gross = Number(r.gross) || 0;
+    const tax = Number(r.tax) || 0;
+    const ptax = Number(r.ptax) || 0;
+    const epf = Number(r.epf) || 0;
+    const misc = Number(r.misc) || 0;
+    const net = gross - tax - ptax - epf - misc;
+    totGross += gross; totTax += tax; totPtax += ptax; totEpf += epf; totMisc += misc; totNet += net;
+    rowsOut.push([
+      quote(year), quote(r.month), cell(gross, true), cell(tax, true), cell(ptax, true), cell(epf, true), cell(misc, true), cell(net, true)
+    ].join(","));
+  });
+  rowsOut.push([quote("Totals"), quote(""), String(totGross), String(totTax), String(totPtax), String(totEpf), String(totMisc), String(totNet)].join(","));
+  const csv = '\uFEFF' + rowsOut.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `salary-${year}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadMFCsv(year, rows) {
+  const quote = (v) => {
+    if (v === null || v === undefined) return '""';
+    return '"' + String(v).replace(/"/g, '""') + '"';
+  };
+  const cell = (v, isNumeric) => isNumeric ? String(Number(v) || 0) : quote(v);
+  const hdr = [quote("Year"), quote("Month"), "Amount", quote("Note")].join(",");
+  const out = [hdr];
+  let tot = 0;
+  rows.forEach((r) => {
+    const amt = Number(r.amount) || 0;
+    tot += amt;
+    out.push([quote(year), quote(r.month), String(amt), quote(r.note || "")].join(","));
+  });
+  out.push([quote("Totals"), quote(""), String(tot), quote("")].join(","));
+  const csv = '\uFEFF' + out.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mf-${year}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /* ------------------------------------------------------------------ */
 /* Main App                                                            */
 /* ------------------------------------------------------------------ */
 export default function App({ onSignOut } = {}) {
   const [data, setData] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const [dark, setDark] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [tab, setTab] = useState("dashboard");
   const [year, setYear] = useState("2026-27");
@@ -220,6 +284,8 @@ export default function App({ onSignOut } = {}) {
       }
       setLoaded(true);
     })();
+    // sync body class with dark state
+    if (dark) document.body.classList.add('dark'); else document.body.classList.remove('dark');
   }, []);
 
   const persist = useCallback((next) => {
@@ -283,6 +349,12 @@ export default function App({ onSignOut } = {}) {
           background: linear-gradient(180deg, var(--paper-raised), #F3F8ED);
           position: relative;
         }
+        body.dark .lg-topbar { background: linear-gradient(180deg, #1B3527, #122218); }
+        body.dark { background: #07120d; color: #cfe6d5; transition: background .2s ease, color .2s ease; }
+        body.dark .lg-card, body.dark .lg-nav, body.dark .lg-month-block { background: linear-gradient(180deg,#072617,#0b2418); border-color: #224232; box-shadow: 0 4px 18px rgba(0,0,0,0.6); }
+        .lg-btn, .lg-icon-btn { transition: transform .12s ease, box-shadow .12s ease; }
+        .lg-btn:hover { transform: translateY(-2px); }
+        .lg-card { transition: background .18s ease, border-color .18s ease, box-shadow .18s ease; }
         .lg-brand { display: flex; align-items: center; gap: 12px; }
         .lg-brand-mark {
           width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
@@ -420,7 +492,7 @@ export default function App({ onSignOut } = {}) {
         }
       `}</style>
 
-      <TopBar saveState={saveState} onSignOut={onSignOut} />
+      <TopBar dark={dark} setDark={setDark} saveState={saveState} onSignOut={onSignOut} />
       <div className="lg-body">
         <Nav tab={tab} setTab={setTab} />
         <div className="lg-main">
@@ -445,6 +517,9 @@ function TopBar({ saveState, onSignOut }) {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button className="lg-icon-btn" title="Toggle theme" onClick={() => { document.body.classList.toggle('dark'); }}>
+          <Sun size={14} />
+        </button>
         {onSignOut && (
           <button className="lg-icon-btn" title="Sign out" onClick={onSignOut} style={{ border: "1px solid var(--rule-strong)" }}>
             <LogOut size={14} />
@@ -524,6 +599,37 @@ function Dashboard({ data, year, setYear }) {
     return { credits, debits, expenses, invest, closing, opening, netSalary, mfTotal };
   }, [expMonths, salMonths, mfMonths]);
 
+  const analytics = useMemo(() => {
+    let avgMonthlyExpenses = 0;
+    let topCategory = { label: null, amount: 0 };
+    let largestSingle = { month: null, label: null, amount: 0 };
+    if (expMonths && expMonths.length) {
+      avgMonthlyExpenses = Math.round(totals.expenses / expMonths.length);
+      const catMap = {};
+      expMonths.forEach((m) => {
+        (m.events || []).forEach((e) => {
+          const debit = Number(e.debit) || 0;
+          if (debit > 0) {
+            catMap[e.label] = (catMap[e.label] || 0) + debit;
+            if (debit > largestSingle.amount) {
+              largestSingle = { month: m.month, label: e.label, amount: debit };
+            }
+          }
+        });
+      });
+      Object.keys(catMap).forEach((k) => {
+        if (catMap[k] > topCategory.amount) topCategory = { label: k, amount: catMap[k] };
+      });
+    }
+    // also build categoryData and monthlyExpenses for charts
+    const categoryData = Object.keys(catMap).map((k) => ({ name: k, value: catMap[k] }));
+    const monthlyExpenses = expMonths.map((m) => {
+      const debits = (m.events || []).reduce((s, e) => s + (Number(e.debit) || 0), 0);
+      return { month: m.month, value: debits };
+    });
+    return { avgMonthlyExpenses, topCategory, largestSingle, categoryData, monthlyExpenses };
+  }, [expMonths, totals.expenses]);
+
   const chartData = expMonths.map((m) => {
     const c = computeClosing(m);
     return { month: m.month, balance: Math.round(c.closing), expenses: Math.round(Number(m.expensesTotal) || 0), invested: Math.round(Number(m.investmentsTotal) || 0) };
@@ -536,6 +642,27 @@ function Dashboard({ data, year, setYear }) {
         year={year} setYear={setYear}
       />
       <div className="lg-stat-grid">
+        <div className="lg-stat" style={{ "--stat-accent": "#6B4C2F", "--stat-accent-soft": "#F6EFE6" }}>
+          <div className="lg-stat-top">
+            <div className="lg-stat-label" style={{ marginBottom: 0 }}>Avg monthly expenses</div>
+            <div className="lg-stat-icon"><Wallet size={13} /></div>
+          </div>
+          <div className="lg-stat-value">{fmtSigned(analytics.avgMonthlyExpenses)}</div>
+        </div>
+        <div className="lg-stat" style={{ "--stat-accent": "#924242", "--stat-accent-soft": "#F9EAEA" }}>
+          <div className="lg-stat-top">
+            <div className="lg-stat-label" style={{ marginBottom: 0 }}>Top expense category</div>
+            <div className="lg-stat-icon"><TrendingDown size={13} /></div>
+          </div>
+          <div className="lg-stat-value">{analytics.topCategory.label ? `${analytics.topCategory.label} — ${fmtSigned(analytics.topCategory.amount)}` : '—'}</div>
+        </div>
+        <div className="lg-stat" style={{ "--stat-accent": "#9B3B34", "--stat-accent-soft": "#F9EAEA" }}>
+          <div className="lg-stat-top">
+            <div className="lg-stat-label" style={{ marginBottom: 0 }}>Largest single expense</div>
+            <div className="lg-stat-icon"><Trash2 size={13} /></div>
+          </div>
+          <div className="lg-stat-value">{analytics.largestSingle.amount ? `${analytics.largestSingle.label} (${analytics.largestSingle.month}) — ${fmtSigned(analytics.largestSingle.amount)}` : '—'}</div>
+        </div>
         <div className="lg-stat" style={{ "--stat-accent": "#4C6656", "--stat-accent-soft": "#E7EDE4" }}>
           <div className="lg-stat-top">
             <div className="lg-stat-label" style={{ marginBottom: 0 }}>Opening balance</div>
@@ -590,6 +717,35 @@ function Dashboard({ data, year, setYear }) {
       {chartData.length > 0 ? (
         <>
           <div className="lg-card">
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 15 }}>Expense breakdown</div>
+              <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>Category share</div>
+            </div>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <div style={{ width: 220, height: 220 }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie dataKey="value" data={analytics.categoryData} nameKey="name" cx="50%" cy="50%" outerRadius={80} label={(entry) => entry.name}>
+                      {analytics.categoryData.map((c, i) => <Cell key={i} fill={["#9B3B34","#2C6B4C","#A9782E","#4C6656","#6B4C2F"][i%5]} />)}
+                    </Pie>
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ flex: 1 }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={analytics.monthlyExpenses}>
+                    <CartesianGrid stroke="#C4D3BC" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fontFamily: "IBM Plex Mono", fill: "#4C6656" }} />
+                    <YAxis tickFormatter={(v) => "₹" + fmt(v)} />
+                    <Tooltip formatter={(v) => "₹" + fmt(v)} />
+                    <Bar dataKey="value" fill="#9B3B34" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+          <div className="lg-card">
             <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, marginBottom: 10, fontSize: 15 }}>Closing balance by month</div>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={chartData}>
@@ -636,6 +792,8 @@ function ExpensesTab({ data, persist, year, setYear }) {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadFrom, setDownloadFrom] = useState("");
   const [downloadTo, setDownloadTo] = useState("");
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const months = data.expenses[year] || [];
 
   const update = (updater) => {
@@ -697,6 +855,24 @@ function ExpensesTab({ data, persist, year, setYear }) {
   const usedMonths = months.map((m) => m.month);
   const canAddMonth = MONTHS.some((mo) => !usedMonths.includes(mo));
 
+  const allCategories = useMemo(() => {
+    const s = new Set();
+    months.forEach((m) => (m.events||[]).forEach((e) => { if (e.label) s.add(e.label); }));
+    return Array.from(s);
+  }, [months]);
+
+  const filteredMonths = useMemo(() => {
+    if (!query && !categoryFilter) return months;
+    return months.map((m) => {
+      const filteredEvents = (m.events||[]).filter((e) => {
+        if (categoryFilter && e.label !== categoryFilter) return false;
+        if (query && !JSON.stringify(e).toLowerCase().includes(query.toLowerCase())) return false;
+        return true;
+      });
+      return { ...m, events: filteredEvents };
+    }).filter((m) => (m.events||[]).length > 0 || (!query && !categoryFilter));
+  }, [months, query, categoryFilter]);
+
   return (
     <div>
       <YearSwitcher
@@ -704,6 +880,13 @@ function ExpensesTab({ data, persist, year, setYear }) {
         year={year} setYear={setYear} onAddYear={addYear}
       />
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1 }}>
+          <input className="lg-input" placeholder="Search events or notes" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="lg-input" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">All categories</option>
+            {allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
         <button className="lg-btn" onClick={() => { setDownloadOpen((d) => !d); if (!downloadFrom) setDownloadFrom(months.length ? months[0].month : ""); if (!downloadTo) setDownloadTo(months.length ? months[months.length-1].month : ""); }}>
           <ArrowDownCircle size={14} /> Download CSV
         </button>
@@ -730,7 +913,7 @@ function ExpensesTab({ data, persist, year, setYear }) {
         )}
       </div>
       {months.length === 0 && <div className="lg-empty">No months added for {year} yet.</div>}
-      {months.map((m) => (
+      {filteredMonths.map((m) => (
         <MonthCard
           key={m.month}
           m={m}
@@ -987,6 +1170,9 @@ function SalaryTab({ data, persist, year, setYear }) {
         </table>
         {rows.length === 0 && <div className="lg-empty">No salary entries for {year} yet.</div>}
       </div>
+      <div style={{ marginTop: 10 }}>
+        <button className="lg-btn" onClick={() => downloadSalaryCSV(year, rows)}><ArrowDownCircle size={14} /> Export year CSV</button>
+      </div>
 
       {availableMonths.length > 0 && (
         <div className="lg-card">
@@ -1099,6 +1285,9 @@ function MFTab({ data, persist }) {
           </tbody>
         </table>
         {allRows.length === 0 && <div className="lg-empty">No MF entries yet — add one below.</div>}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <button className="lg-btn" onClick={() => downloadMFCsv(form.year, data.mf[form.year] || [])}><ArrowDownCircle size={14} /> Export year CSV</button>
       </div>
 
       <div className="lg-card">
