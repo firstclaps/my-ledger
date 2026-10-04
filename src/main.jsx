@@ -1,30 +1,40 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "./firebase.js";
-import { createFirestoreStorage } from "./firestoreStorage.js";
-import Login from "./Login.jsx";
 import App from "./App.jsx";
 import { Loader2 } from "lucide-react";
 
+function createLocalStorageAdapter() {
+  return {
+    async get(key) {
+      const value = localStorage.getItem(key);
+      return value === null ? null : { key, value, shared: false };
+    },
+    async set(key, value) {
+      localStorage.setItem(key, value);
+      return { key, value, shared: false };
+    },
+    async delete(key) {
+      const existed = localStorage.getItem(key) !== null;
+      localStorage.removeItem(key);
+      return { key, deleted: existed, shared: false };
+    },
+    async list(prefix) {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key && (!prefix || key.startsWith(prefix))) keys.push(key);
+      }
+      return { keys, prefix, shared: false };
+    },
+  };
+}
+
 function Root() {
-  const [status, setStatus] = useState("checking"); // checking | signedOut | signedIn
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // Point the app's storage calls at this user's private Firestore
-        // documents before we ever mount it, so its first load reads the
-        // right data.
-        window.storage = createFirestoreStorage(user.uid);
-        setStatus("signedIn");
-      } else {
-        setStatus("signedOut");
-      }
-      setReady(true);
-    });
-    return unsub;
+    window.storage = createLocalStorageAdapter();
+    setReady(true);
   }, []);
 
   if (!ready) {
@@ -38,9 +48,7 @@ function Root() {
     );
   }
 
-  if (status === "signedOut") return <Login />;
-
-  return <App onSignOut={() => signOut(auth)} />;
+  return <App />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(
