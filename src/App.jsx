@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard, Wallet, Landmark, PiggyBank, Plus, Trash2,
   ChevronDown, ChevronRight, ArrowDownCircle, ArrowUpCircle,
-  Save, Check, Loader2, X, BookOpen, TrendingUp, TrendingDown, IndianRupee, LogOut,
+  Save, Loader2, X, BookOpen, TrendingUp, TrendingDown, IndianRupee, LogOut,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -57,26 +57,56 @@ function downloadLedgerCSV(year, months, fromMonth, toMonth) {
   const s = Math.min(start, end);
   const e = Math.max(start, end);
   const sel = months.slice(s, e + 1);
-
   const rows = [];
+  const quote = (v) => {
+    if (v === null || v === undefined) return '""';
+    return '"' + String(v).replace(/"/g, '""') + '"';
+  };
+  const cell = (v, isNumeric) => {
+    if (isNumeric) {
+      const n = Number(v) || 0;
+      return String(n);
+    }
+    return quote(v);
+  };
+
   // header
-  rows.push(["Year", "Month", "Opening", "Credits", "Debits", "Closing", "Event Label", "Note", "Credit", "Debit"].join(","));
+  rows.push([
+    quote("Year"), quote("Month"), "Opening", "Credits", "Debits", "Closing", quote("Event Label"), quote("Note"), "Credit", "Debit"
+  ].join(","));
+
+  let totalCredits = 0;
+  let totalDebits = 0;
+
   sel.forEach((m) => {
     const c = computeClosing(m);
+    totalCredits += c.credits || 0;
+    totalDebits += c.debits || 0;
     if (!m.events || m.events.length === 0) {
-      rows.push([year, m.month, m.opening || 0, c.credits || 0, c.debits || 0, c.closing || 0, "", "", "", ""].join(","));
+      rows.push([
+        quote(year), quote(m.month), cell(m.opening, true), cell(c.credits, true), cell(c.debits, true), cell(c.closing, true), quote(""), quote(""), cell(0, true), cell(0, true)
+      ].join(","));
     } else {
       m.events.forEach((ev, i) => {
         if (i === 0) {
-          rows.push([year, m.month, m.opening || 0, c.credits || 0, c.debits || 0, c.closing || 0, ev.label || "", (ev.note||""), ev.credit||0, ev.debit||0].join(","));
+          rows.push([
+            quote(year), quote(m.month), cell(m.opening, true), cell(c.credits, true), cell(c.debits, true), cell(c.closing, true), quote(ev.label || ""), quote(ev.note || ""), cell(ev.credit, true), cell(ev.debit, true)
+          ].join(","));
         } else {
-          rows.push(["", "", "", "", "", "", ev.label || "", (ev.note||""), ev.credit||0, ev.debit||0].join(","));
+          rows.push([
+            quote(""), quote(""), "", "", "", "", quote(ev.label || ""), quote(ev.note || ""), cell(ev.credit, true), cell(ev.debit, true)
+          ].join(","));
         }
       });
     }
   });
 
-  const csv = rows.join("\n");
+  // totals row
+  rows.push([
+    quote("Totals"), quote(""), "", String(totalCredits), String(totalDebits), "", quote(""), quote(""), "", ""
+  ].join(","));
+
+  const csv = '\uFEFF' + rows.join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -263,11 +293,7 @@ export default function App({ onSignOut } = {}) {
         .lg-title { font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700; letter-spacing: 0.2px; line-height: 1.15; }
         .lg-title .sub { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); font-weight: 400; display:block; margin-top:3px; letter-spacing: 1.4px; text-transform: uppercase; }
 
-        .lg-save {
-          display:flex; align-items:center; gap:6px; font-size:12px; color: var(--ink-soft);
-          font-family: 'IBM Plex Mono', monospace; background: rgba(44,107,76,0.08); padding: 6px 12px;
-          border-radius: 999px; border: 1px solid rgba(134,164,129,0.5);
-        }
+        
 
         .lg-body { display: flex; flex: 1; min-height: 0; }
 
@@ -419,10 +445,6 @@ function TopBar({ saveState, onSignOut }) {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div className="lg-save">
-          {saveState === "saving" && <><Loader2 size={13} className="animate-spin" /> Saving…</>}
-          {saveState === "saved" && <><Check size={13} /> Saved</>}
-        </div>
         {onSignOut && (
           <button className="lg-icon-btn" title="Sign out" onClick={onSignOut} style={{ border: "1px solid var(--rule-strong)" }}>
             <LogOut size={14} />
@@ -939,12 +961,12 @@ function SalaryTab({ data, persist, year, setYear }) {
               return (
                 <tr key={r.month}>
                   <td style={{ fontWeight: 600 }}>{r.month}</td>
-                  <td className="num">{fmt(r.gross)}</td>
-                  <td className="num">{fmt(r.tax)}</td>
-                  <td className="num">{fmt(r.ptax)}</td>
-                  <td className="num">{fmt(r.epf)}</td>
-                  <td className="num">{fmt(r.misc)}</td>
-                  <td className="num" style={{ fontWeight: 600 }}>{fmt(net)}</td>
+                  <td className="num">{fmtSigned(r.gross)}</td>
+                  <td className="num">{fmtSigned(r.tax)}</td>
+                  <td className="num">{fmtSigned(r.ptax)}</td>
+                  <td className="num">{fmtSigned(r.epf)}</td>
+                  <td className="num">{fmtSigned(r.misc)}</td>
+                  <td className="num" style={{ fontWeight: 600 }}>{fmtSigned(net)}</td>
                   <td><button className="lg-icon-btn" onClick={() => removeRow(r.month)}><Trash2 size={13} /></button></td>
                 </tr>
               );
@@ -952,12 +974,12 @@ function SalaryTab({ data, persist, year, setYear }) {
             {rows.length > 0 && (
               <tr className="lg-total-row">
                 <td>Total</td>
-                <td className="num">{fmt(totalGross)}</td>
-                <td className="num">{fmt(totalTax)}</td>
-                <td className="num">{fmt(totalPtax)}</td>
-                <td className="num">{fmt(totalEpf)}</td>
-                <td className="num">{fmt(totalMisc)}</td>
-                <td className="num">{fmt(totalNet)}</td>
+                <td className="num">{fmtSigned(totalGross)}</td>
+                <td className="num">{fmtSigned(totalTax)}</td>
+                <td className="num">{fmtSigned(totalPtax)}</td>
+                <td className="num">{fmtSigned(totalEpf)}</td>
+                <td className="num">{fmtSigned(totalMisc)}</td>
+                <td className="num">{fmtSigned(totalNet)}</td>
                 <td></td>
               </tr>
             )}
@@ -1066,13 +1088,13 @@ function MFTab({ data, persist }) {
               <tr key={r.year + r.month}>
                 <td className="lg-mono" style={{ color: "var(--ink-soft)" }}>{r.year}</td>
                 <td style={{ fontWeight: 600 }}>{r.month}</td>
-                <td className="num">{fmt(r.amount)}</td>
+                <td className="num">{fmtSigned(r.amount)}</td>
                 <td style={{ color: "var(--ink-soft)" }}>{r.note || "—"}</td>
                 <td><button className="lg-icon-btn" onClick={() => removeRow(r.year, r.month)}><Trash2 size={13} /></button></td>
               </tr>
             ))}
             {allRows.length > 0 && (
-              <tr className="lg-total-row"><td colSpan={2}>Total</td><td className="num" style={{color:"var(--gold)"}}>{fmt(total)}</td><td colSpan={2}></td></tr>
+              <tr className="lg-total-row"><td colSpan={2}>Total</td><td className="num" style={{color:"var(--gold)"}}>{fmtSigned(total)}</td><td colSpan={2}></td></tr>
             )}
           </tbody>
         </table>
