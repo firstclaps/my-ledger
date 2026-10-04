@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard, Wallet, Landmark, PiggyBank, Plus, Trash2,
   ChevronDown, ChevronRight, ArrowDownCircle, ArrowUpCircle,
-  Save, Check, Loader2, X, NotebookPen, TrendingUp, TrendingDown, IndianRupee, LogOut,
+  Save, Check, Loader2, X, BookOpen, TrendingUp, TrendingDown, IndianRupee, LogOut,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -46,6 +46,48 @@ function computeClosing(m) {
   const credits = (m.events || []).reduce((s, e) => s + (Number(e.credit) || 0), 0);
   const debits = (m.events || []).reduce((s, e) => s + (Number(e.debit) || 0), 0);
   return { credits, debits, closing: (Number(m.opening) || 0) + credits - debits };
+}
+
+function downloadLedgerCSV(year, months, fromMonth, toMonth) {
+  if (!months || !months.length) return;
+  const idx = months.map((m) => m.month);
+  const start = idx.indexOf(fromMonth);
+  const end = idx.indexOf(toMonth);
+  if (start === -1 || end === -1) return;
+  const s = Math.min(start, end);
+  const e = Math.max(start, end);
+  const sel = months.slice(s, e + 1);
+
+  const rows = [];
+  // header
+  rows.push(["Year", "Month", "Opening", "Credits", "Debits", "Closing", "Event Label", "Note", "Credit", "Debit"].join(","));
+  sel.forEach((m) => {
+    const c = computeClosing(m);
+    if (!m.events || m.events.length === 0) {
+      rows.push([year, m.month, m.opening || 0, c.credits || 0, c.debits || 0, c.closing || 0, "", "", "", ""].join(","));
+    } else {
+      m.events.forEach((ev, i) => {
+        if (i === 0) {
+          rows.push([year, m.month, m.opening || 0, c.credits || 0, c.debits || 0, c.closing || 0, ev.label || "", (ev.note||""), ev.credit||0, ev.debit||0].join(","));
+        } else {
+          rows.push(["", "", "", "", "", "", ev.label || "", (ev.note||""), ev.credit||0, ev.debit||0].join(","));
+        }
+      });
+    }
+  });
+
+  const csv = rows.join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const fnameFrom = sel[0] ? sel[0].month : "from";
+  const fnameTo = sel[sel.length-1] ? sel[sel.length-1].month : "to";
+  a.download = `ledger-${year}-${fnameFrom}-${fnameTo}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /* ------------------------------------------------------------------ */
@@ -370,7 +412,7 @@ function TopBar({ saveState, onSignOut }) {
   return (
     <div className="lg-topbar">
       <div className="lg-brand">
-        <div className="lg-brand-mark"><NotebookPen size={18} /></div>
+        <div className="lg-brand-mark"><BookOpen size={18} /></div>
         <div className="lg-title">
           My Ledger
           <span className="sub">Personal Cash Flow &amp; Investments</span>
@@ -380,7 +422,6 @@ function TopBar({ saveState, onSignOut }) {
         <div className="lg-save">
           {saveState === "saving" && <><Loader2 size={13} className="animate-spin" /> Saving…</>}
           {saveState === "saved" && <><Check size={13} /> Saved</>}
-          {saveState === "idle" && <><Save size={13} /> Up to date</>}
         </div>
         {onSignOut && (
           <button className="lg-icon-btn" title="Sign out" onClick={onSignOut} style={{ border: "1px solid var(--rule-strong)" }}>
@@ -473,6 +514,13 @@ function Dashboard({ data, year, setYear }) {
         year={year} setYear={setYear}
       />
       <div className="lg-stat-grid">
+        <div className="lg-stat" style={{ "--stat-accent": "#4C6656", "--stat-accent-soft": "#E7EDE4" }}>
+          <div className="lg-stat-top">
+            <div className="lg-stat-label" style={{ marginBottom: 0 }}>Opening balance</div>
+            <div className="lg-stat-icon"><IndianRupee size={13} /></div>
+          </div>
+          <div className="lg-stat-value">{totals.opening !== null ? fmtSigned(totals.opening) : "—"}</div>
+        </div>
         <div className="lg-stat" style={{ "--stat-accent": "#1B3527", "--stat-accent-soft": "#E4EFE1" }}>
           <div className="lg-stat-top">
             <div className="lg-stat-label" style={{ marginBottom: 0 }}>Closing balance</div>
@@ -563,6 +611,9 @@ function Dashboard({ data, year, setYear }) {
 /* ------------------------------------------------------------------ */
 function ExpensesTab({ data, persist, year, setYear }) {
   const [openMonth, setOpenMonth] = useState(null);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [downloadFrom, setDownloadFrom] = useState("");
+  const [downloadTo, setDownloadTo] = useState("");
   const months = data.expenses[year] || [];
 
   const update = (updater) => {
@@ -630,6 +681,32 @@ function ExpensesTab({ data, persist, year, setYear }) {
         years={visibleYears(data.years, year, (y) => (data.expenses[y]||[]).length > 0)}
         year={year} setYear={setYear} onAddYear={addYear}
       />
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+        <button className="lg-btn" onClick={() => { setDownloadOpen((d) => !d); if (!downloadFrom) setDownloadFrom(months.length ? months[0].month : ""); if (!downloadTo) setDownloadTo(months.length ? months[months.length-1].month : ""); }}>
+          <ArrowDownCircle size={14} /> Download CSV
+        </button>
+        {downloadOpen && (
+          <div className="lg-card" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div style={{ minWidth: 110 }}>
+              <label style={{ fontSize: 11, color: "var(--ink-soft)", display: "block", marginBottom: 6 }}>From</label>
+              <select className="lg-input" value={downloadFrom} onChange={(e) => setDownloadFrom(e.target.value)}>
+                {months.map((mm) => <option key={mm.month} value={mm.month}>{mm.month}</option>)}
+              </select>
+            </div>
+            <div style={{ minWidth: 110 }}>
+              <label style={{ fontSize: 11, color: "var(--ink-soft)", display: "block", marginBottom: 6 }}>To</label>
+              <select className="lg-input" value={downloadTo} onChange={(e) => setDownloadTo(e.target.value)}>
+                {months.map((mm) => <option key={mm.month} value={mm.month}>{mm.month}</option>)}
+              </select>
+            </div>
+            <div style={{ marginLeft: 6 }}>
+              <button className="lg-btn sm" onClick={() => { downloadLedgerCSV(year, months, downloadFrom, downloadTo); }}>
+                <Save size={12} /> Download
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       {months.length === 0 && <div className="lg-empty">No months added for {year} yet.</div>}
       {months.map((m) => (
         <MonthCard
@@ -798,6 +875,17 @@ function SalaryTab({ data, persist, year, setYear }) {
   const rows = data.salary[year] || [];
   const [form, setForm] = useState({ month: "", gross: "", tax: "", ptax: "", epf: "", misc: "" });
 
+  const addYear = () => {
+    const ny = nextFY(data.years[data.years.length - 1]);
+    const next = deepClone(data);
+    if (!next.years.includes(ny)) next.years.push(ny);
+    if (!next.expenses[ny]) next.expenses[ny] = [];
+    if (!next.salary[ny]) next.salary[ny] = [];
+    if (!next.mf[ny]) next.mf[ny] = [];
+    persist(next);
+    setYear(ny);
+  };
+
   const removeRow = (month) => {
     const next = deepClone(data);
     const idx = (next.salary[year] || []).findIndex((r) => r.month === month);
@@ -824,12 +912,17 @@ function SalaryTab({ data, persist, year, setYear }) {
   const usedMonths = rows.map((r) => r.month);
   const availableMonths = MONTHS.filter((mo) => !usedMonths.includes(mo));
   const totalNet = rows.reduce((s, r) => s + ((Number(r.gross)||0)-(Number(r.tax)||0)-(Number(r.ptax)||0)-(Number(r.epf)||0)-(Number(r.misc)||0)), 0);
+  const totalGross = rows.reduce((s, r) => s + (Number(r.gross) || 0), 0);
+  const totalTax = rows.reduce((s, r) => s + (Number(r.tax) || 0), 0);
+  const totalPtax = rows.reduce((s, r) => s + (Number(r.ptax) || 0), 0);
+  const totalEpf = rows.reduce((s, r) => s + (Number(r.epf) || 0), 0);
+  const totalMisc = rows.reduce((s, r) => s + (Number(r.misc) || 0), 0);
 
   return (
     <div>
       <YearSwitcher
         years={visibleYears(data.years, year, (y) => (data.salary[y]||[]).length > 0)}
-        year={year} setYear={setYear}
+        year={year} setYear={setYear} onAddYear={addYear}
       />
       <div className="lg-card" style={{ overflowX: "auto" }}>
         <table className="lg-table">
@@ -858,8 +951,14 @@ function SalaryTab({ data, persist, year, setYear }) {
             })}
             {rows.length > 0 && (
               <tr className="lg-total-row">
-                <td>Total</td><td colSpan={5}></td>
-                <td className="num">{fmt(totalNet)}</td><td></td>
+                <td>Total</td>
+                <td className="num">{fmt(totalGross)}</td>
+                <td className="num">{fmt(totalTax)}</td>
+                <td className="num">{fmt(totalPtax)}</td>
+                <td className="num">{fmt(totalEpf)}</td>
+                <td className="num">{fmt(totalMisc)}</td>
+                <td className="num">{fmt(totalNet)}</td>
+                <td></td>
               </tr>
             )}
           </tbody>

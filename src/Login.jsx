@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "./firebase.js";
-import { LogIn, Loader2, NotebookPen } from "lucide-react";
+import { LogIn, Loader2, BookOpen } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -63,7 +63,7 @@ export default function Login() {
         .login-btn:disabled { opacity: .7; cursor: default; transform: none; }
       `}</style>
       <form className="login-card" onSubmit={submit}>
-        <div className="login-mark"><NotebookPen size={20} /></div>
+        <div className="login-mark"><BookOpen size={20} /></div>
         <div className="login-title">My Ledger</div>
         <div className="login-sub">Sign in to your personal ledger</div>
 
