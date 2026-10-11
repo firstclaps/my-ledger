@@ -1,50 +1,57 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import ReactDOM from "react-dom/client";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "./firebase.js";
-import { createFirestoreStorage } from "./firestoreStorage.js";
-import Login from "./Login.jsx";
 import App from "./App.jsx";
-import { Loader2 } from "lucide-react";
 
-function Root() {
-  const [status, setStatus] = useState("checking"); // checking | signedOut | signedIn
-  const [ready, setReady] = useState(false);
+function createLocalStorage() {
+  const prefix = "my-ledger:";
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // Point the app's storage calls at this user's private Firestore
-        // documents before we ever mount it, so its first load reads the
-        // right data.
-        window.storage = createFirestoreStorage(user.uid);
-        setStatus("signedIn");
-      } else {
-        setStatus("signedOut");
+  return {
+    async get(key) {
+      try {
+        const value = localStorage.getItem(prefix + key);
+        return value == null ? null : { key, value, shared: false };
+      } catch {
+        return null;
       }
-      setReady(true);
-    });
-    return unsub;
-  }, []);
-
-  if (!ready) {
-    return (
-      <div style={{
-        minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-        background: "#EAF1E4", color: "#4C6656", fontFamily: "IBM Plex Sans, sans-serif",
-      }}>
-        <Loader2 className="animate-spin" size={20} style={{ marginRight: 8 }} /> Loading…
-      </div>
-    );
-  }
-
-  if (status === "signedOut") return <Login />;
-
-  return <App onSignOut={() => signOut(auth)} />;
+    },
+    async set(key, value) {
+      try {
+        localStorage.setItem(prefix + key, value);
+        return { key, value, shared: false };
+      } catch {
+        return { key, value, shared: false };
+      }
+    },
+    async delete(key) {
+      try {
+        const existed = localStorage.getItem(prefix + key) !== null;
+        localStorage.removeItem(prefix + key);
+        return { key, deleted: existed, shared: false };
+      } catch {
+        return { key, deleted: false, shared: false };
+      }
+    },
+    async list(prefixFilter) {
+      try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const storageKey = localStorage.key(i);
+          if (!storageKey || !storageKey.startsWith(prefix)) continue;
+          const key = storageKey.slice(prefix.length);
+          if (!prefixFilter || key.startsWith(prefixFilter)) keys.push(key);
+        }
+        return { keys, prefix: prefixFilter || "", shared: false };
+      } catch {
+        return { keys: [], prefix: prefixFilter || "", shared: false };
+      }
+    },
+  };
 }
+
+window.storage = createLocalStorage();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <Root />
+    <App />
   </React.StrictMode>
 );
